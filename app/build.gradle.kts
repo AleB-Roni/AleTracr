@@ -91,6 +91,8 @@ dependencies {
 
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.9.3")
+    // Play-Services ziehen eine alte Fragment-Version; >= 1.3 ist für registerForActivityResult nötig.
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.navigation:navigation-compose:2.8.5")
