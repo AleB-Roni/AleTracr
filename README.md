@@ -21,7 +21,8 @@ Kalorien-Tracker für Android – ähnlich wie MyFitnessPal, mit **kostenloser K
 
 **Immer im Blick**
 - **Homescreen-Widget**: übrige Kalorien, Makros, „+ Eintragen“
-- **Dauerhafte Benachrichtigung** „Noch X kcal übrig“ – Kalorien direkt eintippen (`250 Apfel`), „Mehr…“, „Ausblenden“
+- **Dauerhafte Benachrichtigung** „Noch X kcal übrig“ – Kalorien direkt eintippen (`250 Apfel`), „Mehr…“, „Ausblenden“;
+  bleibt bei „Alle löschen“ bestehen und kommt sofort zurück, falls sie weggewischt wird
 - **Smarte Erinnerungen**: Frühstück/Mittag/Abend nur, wenn noch nichts eingetragen ist; Wasser-Erinnerung
 - **Intervallfasten-Timer** (14/16/18 h) mit Benachrichtigung bei Ziel
 

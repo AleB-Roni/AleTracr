@@ -1,6 +1,7 @@
 package com.aleb.aletracr.notify
 
 import android.Manifest
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -29,6 +30,7 @@ object CalorieNotification {
     const val KEY_QUICK_INPUT = "quick_kcal_input"
     const val ACTION_QUICK_ADD = "com.aleb.aletracr.action.QUICK_ADD"
     const val ACTION_DISABLE = "com.aleb.aletracr.action.DISABLE_NOTIFICATION"
+    const val ACTION_DISMISSED = "com.aleb.aletracr.action.NOTIFICATION_DISMISSED"
     const val EXTRA_OPEN_QUICK_ADD = "open_quick_add"
 
     fun createChannel(context: Context) {
@@ -97,6 +99,14 @@ object CalorieNotification {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
+        // If the notification is removed anyway (e.g. swiped away on Android 14+),
+        // it is posted again right away. Only "Ausblenden" switches it off.
+        val dismissedIntent = PendingIntent.getBroadcast(
+            context, 4,
+            Intent(context, NotificationActionReceiver::class.java).setAction(ACTION_DISMISSED),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_kcal)
             .setContentTitle(title)
@@ -113,7 +123,12 @@ object CalorieNotification {
             .addAction(quickAddAction)
             .addAction(0, "Mehr…", openQuickAdd)
             .addAction(0, "Ausblenden", disableIntent)
+            .setDeleteIntent(dismissedIntent)
             .build()
+            .apply {
+                // Not removed by "Alle löschen".
+                flags = flags or Notification.FLAG_NO_CLEAR or Notification.FLAG_ONGOING_EVENT
+            }
 
         try {
             NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)

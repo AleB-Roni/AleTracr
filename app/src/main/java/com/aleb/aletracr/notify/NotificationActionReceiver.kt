@@ -38,6 +38,9 @@ class NotificationActionReceiver : BroadcastReceiver() {
                             toast(context, "Bitte eine Zahl eingeben, z. B. 250 oder 250 Apfel")
                         }
                     }
+                    CalorieNotification.ACTION_DISMISSED -> {
+                        // Nothing to do: the refresh below posts it again (if still enabled).
+                    }
                     CalorieNotification.ACTION_DISABLE -> {
                         repo.settingsRepo.setNotificationEnabled(false)
                         toast(context, "Benachrichtigung aus – in den Einstellungen wieder aktivierbar")
