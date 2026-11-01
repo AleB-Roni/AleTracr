@@ -20,7 +20,13 @@ internal object AiPrompts {
           und führe sie als eigene Position auf, wenn sie relevant sind.
         - Verwende Nährwerte gängiger deutscher Nährwerttabellen (z. B. BLS) bzw. typischer Produkte.
         - Setze confidence auf "niedrig", wenn die Menge oder Zubereitung schwer erkennbar ist.
+        - Die Beschreibung kann per Spracheingabe diktiert sein: Zahlwörter ("zwei", "eineinhalb"),
+          Stückangaben ("3 Scheiben", "eine Handvoll", "ein großer Teller") und Grammangaben ("150 Gramm")
+          genau übernehmen und in Gramm umrechnen; offensichtliche Erkennungsfehler sinnvoll korrigieren.
+        - Nenne bei Stückangaben die Stückzahl im Namen, z. B. "Vollkornbrot (2 Scheiben)".
         - Wenn auf dem Bild kein Essen zu sehen ist, gib eine leere items-Liste zurück und erkläre es in notes.
+        - summary: eine kurze, freundliche Zusammenfassung der ganzen Mahlzeit in einem Satz
+          (was es ist und ungefähr wie viele Kalorien insgesamt).
         Antworte ausschließlich auf Deutsch.
     """.trimIndent()
 
@@ -64,9 +70,10 @@ internal object AiPrompts {
                     "additionalProperties" to false,
                 ),
             ),
+            "summary" to mapOf("type" to "string", "description" to "Zusammenfassung der Mahlzeit in einem Satz"),
             "notes" to mapOf("type" to "string", "description" to "Kurzer Hinweis zur Schätzung, max. 2 Sätze"),
         ),
-        "required" to listOf("items", "notes"),
+        "required" to listOf("items", "summary", "notes"),
         "additionalProperties" to false,
     )
 
@@ -101,7 +108,7 @@ internal object AiPrompts {
     )
 
     @Serializable
-    private data class WireEstimate(val items: List<WireItem> = emptyList(), val notes: String = "")
+    private data class WireEstimate(val items: List<WireItem> = emptyList(), val notes: String = "", val summary: String = "")
 
     @Serializable
     private data class WireLabel(
@@ -140,6 +147,7 @@ internal object AiPrompts {
                 )
             },
             notes = w.notes,
+            summary = w.summary,
         )
     }
 

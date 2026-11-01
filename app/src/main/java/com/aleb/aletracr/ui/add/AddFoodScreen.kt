@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.QrCodeScanner
@@ -118,6 +119,7 @@ import com.aleb.aletracr.ui.IconBadge
 import com.aleb.aletracr.ui.NumberField
 import com.aleb.aletracr.ui.SoftCard
 import com.aleb.aletracr.ui.Staggered
+import com.aleb.aletracr.ui.rememberSpeechInput
 import com.aleb.aletracr.ui.theme.Gradients
 import com.aleb.aletracr.ui.theme.MacroColors
 import com.aleb.aletracr.util.ImageUtils
@@ -449,6 +451,11 @@ private fun AiTab(vm: AddFoodViewModel, onDone: () -> Unit) {
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) load(uri, false)
     }
+    val speak = rememberSpeechInput(onError = vm::showMessage) { text ->
+        vm.setDescription(listOf(state.description.trim(), text).filter(String::isNotBlank).joinToString(", "))
+        vm.analyze()
+    }
+
     fun takePhoto(label: Boolean) {
         val uri = ImageUtils.newPhotoUri(context)
         pendingUri = uri
@@ -473,7 +480,7 @@ private fun AiTab(vm: AddFoodViewModel, onDone: () -> Unit) {
                     }
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "Fotografiere deinen Teller oder beschreibe dein Essen – die KI erkennt Lebensmittel, Mengen und Nährwerte.",
+                        "Fotografiere deinen Teller oder beschreibe dein Essen – tippen oder 🎤 sprechen. Die KI erkennt Lebensmittel, Mengen und Nährwerte.",
                         color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -514,6 +521,9 @@ private fun AiTab(vm: AddFoodViewModel, onDone: () -> Unit) {
                 onValueChange = vm::setDescription,
                 label = { Text("Was hast du gegessen?") },
                 placeholder = { Text("z. B. 2 Brötchen mit Butter und Käse, 1 Latte Macchiato") },
+                trailingIcon = {
+                    IconButton(onClick = speak) { Icon(Icons.Filled.Mic, "Per Sprache beschreiben", tint = MaterialTheme.colorScheme.primary) }
+                },
                 minLines = 2,
                 shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth(),
@@ -542,6 +552,7 @@ private fun AiTab(vm: AddFoodViewModel, onDone: () -> Unit) {
                 SoftCard {
                     Column(Modifier.padding(16.dp)) {
                         Text("Summe: ${sel.sumOf { it.item.kcal }.roundToInt()} kcal", style = MaterialTheme.typography.titleLarge)
+                        state.summary?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                         state.notes?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                         Text(
                             "KI-Werte sind Schätzungen. Passe die Mengen bei Bedarf an.",

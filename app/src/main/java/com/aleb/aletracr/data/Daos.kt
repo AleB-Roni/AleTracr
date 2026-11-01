@@ -38,7 +38,10 @@ interface DiaryDao {
     suspend fun insert(entry: DiaryEntry): Long
 
     @Insert
-    suspend fun insertAll(entries: List<DiaryEntry>)
+    suspend fun insertAll(entries: List<DiaryEntry>): List<Long>
+
+    @Query("DELETE FROM diary_entries WHERE id IN (:ids)")
+    suspend fun deleteIds(ids: List<Long>)
 
     @Update
     suspend fun update(entry: DiaryEntry)

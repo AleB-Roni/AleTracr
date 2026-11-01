@@ -33,6 +33,8 @@ data class AiFoodItem(
 data class AiEstimate(
     val items: List<AiFoodItem>,
     val notes: String,
+    /** Short summary of the whole meal, e.g. "Spaghetti mit Tomatensoße und Parmesan, ca. 640 kcal". */
+    val summary: String = "",
 )
 
 class AiException(message: String, cause: Throwable? = null) : Exception(message, cause)

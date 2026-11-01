@@ -114,7 +114,8 @@ class Repository(
         )
     }
 
-    suspend fun logAiItems(date: String, meal: Meal, items: List<AiFoodItem>, fromPhoto: Boolean) {
+    /** Returns the ids of the new entries (for "Rückgängig"). */
+    suspend fun logAiItems(date: String, meal: Meal, items: List<AiFoodItem>, fromPhoto: Boolean): List<Long> =
         diary.insertAll(items.map {
             DiaryEntry(
                 date = date, meal = meal, name = it.name, amountGrams = it.amountGrams,
@@ -123,7 +124,6 @@ class Repository(
                 source = if (fromPhoto) EntrySource.AI_PHOTO else EntrySource.AI_TEXT,
             )
         })
-    }
 
     /** Copies all entries of a meal from one day to another (e.g. "wie gestern"). */
     suspend fun copyMeal(fromDate: String, toDate: String, meal: Meal): Int {

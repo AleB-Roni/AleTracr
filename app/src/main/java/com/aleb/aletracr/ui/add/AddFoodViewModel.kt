@@ -36,6 +36,7 @@ data class AiState(
     val labelLoading: Boolean = false,
     val items: List<EditableAiItem> = emptyList(),
     val notes: String? = null,
+    val summary: String? = null,
     val error: String? = null,
 )
 
@@ -56,6 +57,8 @@ class AddFoodViewModel(
     val selected = MutableStateFlow<Pair<FoodProduct, EntrySource>?>(null)
 
     val message = MutableStateFlow<String?>(null)
+
+    fun showMessage(text: String) { message.value = text }
 
     val recent = repo.foods.recent().map { list -> list.map { it.toProduct() } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -167,7 +170,7 @@ class AddFoodViewModel(
                 _ai.update { it.copy(error = "Bitte zuerst in den Einstellungen einen KI-Key hinterlegen (Gemini ist kostenlos).") }
                 return@launch
             }
-            _ai.update { it.copy(loading = true, error = null, items = emptyList(), notes = null) }
+            _ai.update { it.copy(loading = true, error = null, items = emptyList(), notes = null, summary = null) }
             try {
                 val result = client.estimateMeal(state.description, state.image)
                 _ai.update {
@@ -175,6 +178,7 @@ class AddFoodViewModel(
                         loading = false,
                         items = result.items.map { item -> EditableAiItem(item) },
                         notes = result.notes.takeIf(String::isNotBlank),
+                        summary = result.summary.takeIf(String::isNotBlank),
                         error = if (result.items.isEmpty()) "Kein Essen erkannt." else null,
                     )
                 }

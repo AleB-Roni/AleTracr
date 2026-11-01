@@ -13,6 +13,11 @@ Kalorien-Tracker für Android – ähnlich wie MyFitnessPal, mit **kostenloser K
 - Animierter Kalorienring, Makros (Eiweiß, Kohlenhydrate, Fett) sowie Zucker & Ballaststoffe
 - Mahlzeit von gestern kopieren, Mahlzeit als **Rezept** speichern, Löschen mit „Rückgängig“
 
+**Direkt im Tagebuch**
+- 📷 **Essen fotografieren** → KI-Zusammenfassung mit Kalorien, Lebensmitteln und Mengen → bestätigen
+- 🎤 **Per Sprache eintragen**: „zwei Scheiben Vollkornbrot mit Käse und ein Apfel“ → die KI erkennt Stückzahlen
+  und Grammangaben und trägt alles automatisch ein (mit „Rückgängig“)
+
 **Hinzufügen**
 - **Produktsuche** in [Open Food Facts](https://world.openfoodfacts.org) (über 3 Mio. Produkte) + **Barcode-Scanner**
 - **KI-Schätzung** per Foto und/oder Beschreibung, editierbar vor dem Speichern

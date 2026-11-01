@@ -1,6 +1,22 @@
 package com.aleb.aletracr.ui.diary
 
 import android.app.Application
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import com.aleb.aletracr.remote.AiEstimate
+import com.aleb.aletracr.remote.AiException
+import com.aleb.aletracr.remote.AiFoodItem
+import com.aleb.aletracr.ui.rememberPhotoCapture
+import com.aleb.aletracr.ui.rememberSpeechInput
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -177,6 +193,64 @@ class DiaryViewModel(private val repo: Repository, private val app: Application)
 
     fun startFasting(hours: Int) = viewModelScope.launch { repo.settingsRepo.setFasting(System.currentTimeMillis(), hours) }
     fun stopFasting() = viewModelScope.launch { repo.settingsRepo.setFasting(0, settings.value.fastingHours) }
+
+    // --- KI direkt aus dem Tagebuch (Foto / Spracheingabe) ---------------------
+
+    /** Meal that the AI is currently working on (shows a spinner on that card). */
+    val aiBusy = MutableStateFlow<Meal?>(null)
+    val aiResult = MutableStateFlow<QuickAiResult?>(null)
+    val aiError = MutableStateFlow<String?>(null)
+
+    /**
+     * Voice input is added automatically (undo possible); a photo estimate is shown
+     * as a summary first and only added after confirmation.
+     */
+    fun quickAi(meal: Meal, text: String?, photo: ByteArray?) = viewModelScope.launch {
+        val client = repo.aiClient()
+        if (client == null) {
+            aiError.value = "Bitte zuerst in den Einstellungen einen KI-Key hinterlegen (Gemini ist kostenlos)."
+            return@launch
+        }
+        aiBusy.value = meal
+        try {
+            val estimate = client.estimateMeal(text, photo)
+            if (estimate.items.isEmpty()) {
+                aiError.value = estimate.notes.ifBlank { "Kein Essen erkannt." }
+            } else if (photo == null) {
+                val ids = repo.logAiItems(date.value.toString(), meal, estimate.items, fromPhoto = false)
+                aiResult.value = QuickAiResult(meal, text, estimate, addedIds = ids)
+            } else {
+                aiResult.value = QuickAiResult(meal, text, estimate, addedIds = emptyList(), photo = photo)
+            }
+        } catch (e: AiException) {
+            aiError.value = e.message
+        } catch (e: Exception) {
+            aiError.value = "Fehler: ${e.message}"
+        } finally {
+            aiBusy.value = null
+        }
+    }
+
+    fun confirmAi(r: QuickAiResult, selected: List<AiFoodItem>) = viewModelScope.launch {
+        if (selected.isNotEmpty()) repo.logAiItems(date.value.toString(), r.meal, selected, fromPhoto = r.photo != null)
+        aiResult.value = null
+    }
+
+    fun undoAi(r: QuickAiResult) = viewModelScope.launch {
+        repo.diary.deleteIds(r.addedIds)
+        aiResult.value = null
+    }
+}
+
+/** Result of a quick AI entry; [addedIds] is non-empty if the items were already saved (voice). */
+class QuickAiResult(
+    val meal: Meal,
+    val spokenText: String?,
+    val estimate: AiEstimate,
+    val addedIds: List<Long>,
+    val photo: ByteArray? = null,
+) {
+    val alreadyAdded get() = addedIds.isNotEmpty()
 }
 
 private fun Meal.icon(): ImageVector = when (this) {
@@ -206,6 +280,19 @@ fun DiaryScreen(repo: Repository, onAddFood: (date: String, meal: Meal) -> Unit)
     val scope = rememberCoroutineScope()
     var editing by remember { mutableStateOf<DiaryEntry?>(null) }
     var savingRecipe by remember { mutableStateOf<Meal?>(null) }
+    val aiBusy by vm.aiBusy.collectAsState()
+    val aiResult by vm.aiResult.collectAsState()
+    val aiError by vm.aiError.collectAsState()
+    var captureMeal by remember { mutableStateOf(Meal.forTime()) }
+    val speak = rememberSpeechInput(
+        prompt = "Was hast du gegessen? z. B. \"zwei Scheiben Vollkornbrot mit Käse\"",
+        onError = { vm.aiError.value = it },
+    ) { text -> vm.quickAi(captureMeal, text, null) }
+    val photo = rememberPhotoCapture { bytes -> vm.quickAi(captureMeal, null, bytes) }
+
+    LaunchedEffect(aiError) {
+        aiError?.let { snackbar.showSnackbar(it); vm.aiError.value = null }
+    }
 
     LaunchedEffect(settings.healthConnect) { vm.loadActivity() }
 
@@ -262,6 +349,9 @@ fun DiaryScreen(repo: Repository, onAddFood: (date: String, meal: Meal) -> Unit)
                                 }
                             },
                             onSaveRecipe = { savingRecipe = meal },
+                            aiBusy = aiBusy == meal,
+                            onPhoto = { captureMeal = meal; photo() },
+                            onVoice = { captureMeal = meal; speak() },
                             modifier = Modifier.padding(horizontal = 16.dp),
                         )
                     }
@@ -283,6 +373,15 @@ fun DiaryScreen(repo: Repository, onAddFood: (date: String, meal: Meal) -> Unit)
                 }
             },
             onSave = { grams, kcal -> vm.updateAmount(e, grams, kcal); editing = null },
+        )
+    }
+
+    aiResult?.let { r ->
+        QuickAiDialog(
+            result = r,
+            onConfirm = { items -> vm.confirmAi(r, items) },
+            onUndo = { vm.undoAi(r) },
+            onClose = { vm.aiResult.value = null },
         )
     }
 
@@ -488,6 +587,9 @@ private fun MealCard(
     onEntryClick: (DiaryEntry) -> Unit,
     onCopyYesterday: () -> Unit,
     onSaveRecipe: () -> Unit,
+    aiBusy: Boolean,
+    onPhoto: () -> Unit,
+    onVoice: () -> Unit,
     modifier: Modifier,
 ) {
     var menu by remember { mutableStateOf(false) }
@@ -531,10 +633,27 @@ private fun MealCard(
                     }
                 }
             }
-            TextButton(onClick = onAdd, modifier = Modifier.padding(start = 8.dp)) {
-                Icon(Icons.Filled.Add, null)
-                Spacer(Modifier.width(4.dp))
-                Text("Hinzufügen")
+            Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onAdd) {
+                    Icon(Icons.Filled.Add, null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Hinzufügen")
+                }
+                Spacer(Modifier.weight(1f))
+                AnimatedContent(aiBusy, label = "aiBusy") { busy ->
+                    if (busy) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 8.dp)) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.tertiary)
+                            Spacer(Modifier.width(8.dp))
+                            Text("KI rechnet …", style = MaterialTheme.typography.labelMedium)
+                        }
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilledTonalIconButton(onClick = onPhoto) { Icon(Icons.Filled.PhotoCamera, "Essen fotografieren") }
+                            FilledTonalIconButton(onClick = onVoice) { Icon(Icons.Filled.Mic, "Essen per Sprache eintragen") }
+                        }
+                    }
+                }
             }
         }
     }
@@ -612,4 +731,83 @@ private fun NutrientPill(label: String, value: String, color: Color) {
         Text(value, style = MaterialTheme.typography.titleSmall, color = color)
         Text(label, style = MaterialTheme.typography.labelSmall)
     }
+}
+
+@Composable
+private fun QuickAiDialog(
+    result: QuickAiResult,
+    onConfirm: (List<AiFoodItem>) -> Unit,
+    onUndo: () -> Unit,
+    onClose: () -> Unit,
+) {
+    val items = result.estimate.items
+    var selected by remember(result) { mutableStateOf(items.indices.toSet()) }
+    val total = if (result.alreadyAdded) items.sumOf { it.kcal } else items.filterIndexed { i, _ -> i in selected }.sumOf { it.kcal }
+
+    AlertDialog(
+        onDismissRequest = { if (result.alreadyAdded) onClose() },
+        icon = { Icon(Icons.Filled.AutoAwesome, null, tint = MaterialTheme.colorScheme.tertiary) },
+        title = {
+            Text(if (result.alreadyAdded) "Zu ${result.meal.label} hinzugefügt" else "Deine Mahlzeit")
+        },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                result.photo?.let { bytes ->
+                    val bmp = remember(bytes) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }
+                    if (bmp != null) {
+                        Image(
+                            bmp, null, contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxWidth().height(150.dp).clip(MaterialTheme.shapes.medium),
+                        )
+                    }
+                }
+                result.spokenText?.let {
+                    Text("„$it“", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (result.estimate.summary.isNotBlank()) {
+                    Text(result.estimate.summary, style = MaterialTheme.typography.bodyMedium)
+                }
+                Text("${total.roundToInt()} kcal", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+                items.forEachIndexed { i, item ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (!result.alreadyAdded) {
+                            Checkbox(checked = i in selected, onCheckedChange = { on -> selected = if (on) selected + i else selected - i })
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text(item.name, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "${item.amountGrams.roundToInt()} g · E ${item.protein.gramText()} · K ${item.carbs.gramText()} · F ${item.fat.gramText()}",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text("${item.kcal.roundToInt()}", style = MaterialTheme.typography.titleSmall)
+                    }
+                }
+                if (result.estimate.notes.isNotBlank()) {
+                    Text(result.estimate.notes, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(
+                    if (result.alreadyAdded) "Werte sind KI-Schätzungen – tippe im Tagebuch auf einen Eintrag, um die Menge zu ändern."
+                    else "Werte sind KI-Schätzungen.",
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            if (result.alreadyAdded) {
+                TextButton(onClick = onClose) { Text("Fertig") }
+            } else {
+                TextButton(enabled = selected.isNotEmpty(), onClick = {
+                    onConfirm(items.filterIndexed { i, _ -> i in selected })
+                }) { Text("Zu ${result.meal.label} hinzufügen") }
+            }
+        },
+        dismissButton = {
+            if (result.alreadyAdded) {
+                TextButton(onClick = onUndo) { Text("Rückgängig", color = MaterialTheme.colorScheme.error) }
+            } else {
+                TextButton(onClick = onClose) { Text("Verwerfen") }
+            }
+        },
+    )
 }
