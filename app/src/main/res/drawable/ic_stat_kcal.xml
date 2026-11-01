@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- flame, white (status bar icons must be monochrome) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,2C14.5,5.5 17,8 17,12.5C17,16.1 14.8,19 12,19C9.2,19 7,16.1 7,13C7,10.6 8.3,8.7 9.6,7.4C9.6,9.4 10.6,10.6 12,10.6C12.6,8.4 12.7,5.2 12,2ZM5,21H19V22.5H5Z" />
+</vector>

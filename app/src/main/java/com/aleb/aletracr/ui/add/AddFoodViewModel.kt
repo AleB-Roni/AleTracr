@@ -1,0 +1,190 @@
+package com.aleb.aletracr.ui.add
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.aleb.aletracr.data.EntrySource
+import com.aleb.aletracr.data.Meal
+import com.aleb.aletracr.data.Repository
+import com.aleb.aletracr.data.toProduct
+import com.aleb.aletracr.remote.AiException
+import com.aleb.aletracr.remote.AiFoodItem
+import com.aleb.aletracr.remote.FoodProduct
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+data class SearchState(
+    val query: String = "",
+    val loading: Boolean = false,
+    val results: List<FoodProduct> = emptyList(),
+    val error: String? = null,
+    val searched: Boolean = false,
+)
+
+/** An AI-recognised item the user can still edit or deselect before saving. */
+data class EditableAiItem(val item: AiFoodItem, val selected: Boolean = true)
+
+data class AiState(
+    val description: String = "",
+    val image: ByteArray? = null,
+    val loading: Boolean = false,
+    val items: List<EditableAiItem> = emptyList(),
+    val notes: String? = null,
+    val error: String? = null,
+)
+
+class AddFoodViewModel(
+    private val repo: Repository,
+    val date: String,
+    initialMeal: Meal,
+) : ViewModel() {
+    val meal = MutableStateFlow(initialMeal)
+
+    private val _search = MutableStateFlow(SearchState())
+    val search = _search.asStateFlow()
+
+    private val _ai = MutableStateFlow(AiState())
+    val ai = _ai.asStateFlow()
+
+    /** Product chosen for the portion dialog. */
+    val selected = MutableStateFlow<Pair<FoodProduct, EntrySource>?>(null)
+
+    val message = MutableStateFlow<String?>(null)
+
+    val recent = repo.foods.recent().map { list -> list.map { it.toProduct() } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val favorites = repo.foods.favorites().map { list -> list.map { it.toProduct() } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private var searchJob: Job? = null
+
+    // --- Search ---------------------------------------------------------------
+
+    fun setQuery(q: String) = _search.update { it.copy(query = q) }
+
+    fun runSearch() {
+        val q = _search.value.query.trim()
+        if (q.length < 2) return
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            _search.update { it.copy(loading = true, error = null) }
+            val local = repo.searchLocal(q)
+            _search.update { it.copy(results = local) }
+            try {
+                val online = repo.searchOnline(q)
+                val merged = (local + online).distinctBy { it.barcode ?: (it.name + it.brand) }
+                _search.update { it.copy(results = merged, loading = false, searched = true) }
+            } catch (e: Exception) {
+                _search.update {
+                    it.copy(loading = false, searched = true, error = "Online-Suche fehlgeschlagen: ${e.message ?: "unbekannter Fehler"}")
+                }
+            }
+        }
+    }
+
+    fun onBarcode(code: String) = viewModelScope.launch {
+        _search.update { it.copy(loading = true, error = null) }
+        try {
+            val p = repo.lookupBarcode(code)
+            if (p == null) {
+                _search.update { it.copy(loading = false, error = "Produkt $code nicht gefunden. Tipp: Nutze den KI-Tab oder Schnelleintrag.") }
+            } else {
+                _search.update { it.copy(loading = false) }
+                selected.value = p to EntrySource.BARCODE
+            }
+        } catch (e: Exception) {
+            _search.update { it.copy(loading = false, error = "Barcode-Suche fehlgeschlagen: ${e.message}") }
+        }
+    }
+
+    fun select(p: FoodProduct) { selected.value = p to EntrySource.SEARCH }
+
+    fun logSelected(grams: Double, onDone: () -> Unit) {
+        val (p, source) = selected.value ?: return
+        viewModelScope.launch {
+            repo.logProduct(date, meal.value, p, grams, source)
+            selected.value = null
+            onDone()
+        }
+    }
+
+    fun toggleFavorite(p: FoodProduct) = viewModelScope.launch {
+        repo.toggleFavorite(p)
+        message.value = "Favoriten aktualisiert"
+    }
+
+    // --- Quick add ------------------------------------------------------------
+
+    fun quickAdd(name: String, kcal: Double, p: Double, c: Double, f: Double, note: String, onDone: () -> Unit) {
+        viewModelScope.launch {
+            repo.quickAdd(date, meal.value, name, kcal, p, c, f, note)
+            onDone()
+        }
+    }
+
+    // --- AI -------------------------------------------------------------------
+
+    fun setDescription(s: String) = _ai.update { it.copy(description = s) }
+    fun setImage(bytes: ByteArray?) = _ai.update { it.copy(image = bytes, error = null) }
+
+    fun analyze() {
+        val state = _ai.value
+        if (state.description.isBlank() && state.image == null) {
+            _ai.update { it.copy(error = "Mach ein Foto oder beschreibe, was du gegessen hast.") }
+            return
+        }
+        viewModelScope.launch {
+            val client = repo.aiClient()
+            if (client == null) {
+                _ai.update { it.copy(error = "Bitte zuerst in den Einstellungen einen Anthropic API-Key hinterlegen.") }
+                return@launch
+            }
+            _ai.update { it.copy(loading = true, error = null, items = emptyList(), notes = null) }
+            try {
+                val result = client.estimate(state.description, state.image)
+                _ai.update {
+                    it.copy(
+                        loading = false,
+                        items = result.items.map { item -> EditableAiItem(item) },
+                        notes = result.notes.takeIf(String::isNotBlank),
+                        error = if (result.items.isEmpty()) "Kein Essen erkannt." else null,
+                    )
+                }
+            } catch (e: AiException) {
+                _ai.update { it.copy(loading = false, error = e.message) }
+            } catch (e: Exception) {
+                _ai.update { it.copy(loading = false, error = "Fehler: ${e.message}") }
+            }
+        }
+    }
+
+    fun toggleAiItem(index: Int) = _ai.update { s ->
+        s.copy(items = s.items.mapIndexed { i, it -> if (i == index) it.copy(selected = !it.selected) else it })
+    }
+
+    /** Editing the grams of an AI item rescales its nutrition values. */
+    fun setAiGrams(index: Int, grams: Double) = _ai.update { s ->
+        s.copy(items = s.items.mapIndexed { i, e ->
+            if (i != index || e.item.amountGrams <= 0) e else {
+                val f = grams / e.item.amountGrams
+                val it = e.item
+                e.copy(item = it.copy(amountGrams = grams, kcal = it.kcal * f, protein = it.protein * f, carbs = it.carbs * f, fat = it.fat * f))
+            }
+        })
+    }
+
+    fun saveAiItems(onDone: () -> Unit) {
+        val s = _ai.value
+        val chosen = s.items.filter { it.selected }.map { it.item }
+        if (chosen.isEmpty()) return
+        viewModelScope.launch {
+            repo.logAiItems(date, meal.value, chosen, fromPhoto = s.image != null)
+            onDone()
+        }
+    }
+}
