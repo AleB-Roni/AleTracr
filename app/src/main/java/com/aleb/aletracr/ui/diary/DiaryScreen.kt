@@ -209,6 +209,19 @@ fun DiaryScreen(repo: Repository, onAddFood: (date: String, meal: Meal) -> Unit)
 
     LaunchedEffect(settings.healthConnect) { vm.loadActivity() }
 
+    // After midnight, jump from "yesterday" to the new day (unless the user browsed to another day).
+    LaunchedEffect(Unit) {
+        var lastToday = LocalDate.now()
+        while (true) {
+            delay(30_000)
+            val now = LocalDate.now()
+            if (now != lastToday) {
+                if (vm.date.value == lastToday) vm.today()
+                lastToday = now
+            }
+        }
+    }
+
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(bottom = padding.calculateBottomPadding()),
@@ -426,14 +439,16 @@ private fun FastingCard(s: UserSettings, onStart: (Int) -> Unit, onStop: () -> U
                 IconBadge(Icons.Filled.Timer, tertiary)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Intervallfasten", style = MaterialTheme.typography.titleMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Intervallfasten", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                        FilledTonalButton(onClick = { onStart(hours) }) { Text("Start") }
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf(14, 16, 18).forEach { h ->
-                            FilterChip(hours == h, { hours = h }, { Text("$h h") })
+                            FilterChip(hours == h, { hours = h }, { Text("$h h", maxLines = 1, softWrap = false) })
                         }
                     }
                 }
-                FilledTonalButton(onClick = { onStart(hours) }) { Text("Start") }
             } else {
                 val elapsedMin = ((now - s.fastingStart) / 60_000).coerceAtLeast(0)
                 val target = s.fastingHours * 60f

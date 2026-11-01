@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -86,7 +87,10 @@ fun AppNav(repo: Repository, quickAddRequest: Int = 0, onEnableNotification: () 
         NavHost(
             nav,
             startDestination = "diary",
-            modifier = Modifier.padding(bottom = padding.calculateBottomPadding()).consumeWindowInsets(padding),
+            // Only the bottom bar is handled here; each screen handles the status bar itself.
+            modifier = Modifier
+                .padding(bottom = padding.calculateBottomPadding())
+                .consumeWindowInsets(PaddingValues(bottom = padding.calculateBottomPadding())),
             enterTransition = { fadeIn(tween(280)) + slideInVertically(tween(280)) { it / 24 } },
             exitTransition = { fadeOut(tween(180)) },
             popEnterTransition = { fadeIn(tween(280)) },
