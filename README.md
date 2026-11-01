@@ -42,10 +42,18 @@ Kalorien-Tracker für Android – ähnlich wie MyFitnessPal, mit **kostenloser K
 
 Alternativ: **Anthropic Claude** (kostenpflichtig, sehr genau) – Key von console.anthropic.com.
 
-## Bauen
+## Installieren
 
-Jeder Push auf `main` baut per GitHub Actions ein Debug-APK
-(**Actions → Build APK → Artifacts → AleTracr-debug-apk**).
+Neueste Version unter **[Releases](https://github.com/AleB-Roni/AleTracr/releases/latest)** → `AleTracr-x.y.z.apk`
+herunterladen und öffnen. Neue Versionen lassen sich direkt als Update drüber installieren.
+
+## Bauen & veröffentlichen
+
+- Jeder Push auf `main` baut per GitHub Actions ein Test-APK (**Actions → Build APK → Artifacts**).
+- Neues Release: Tag pushen, z. B. `git tag v0.2.0 && git push origin v0.2.0`
+  (oder **Actions → Release → Run workflow**). Das APK wird automatisch an das Release gehängt.
+- Signatur: fester Debug-Schlüssel im Repo (`app/debug.keystore`). Für einen privaten Schlüssel die Secrets
+  `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` setzen – Achtung: ein Schlüsselwechsel erfordert einmalig eine Neuinstallation.
 
 ```bash
 ./gradlew assembleDebug

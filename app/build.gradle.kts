@@ -14,15 +14,37 @@ android {
         applicationId = "com.aleb.aletracr"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // CI sets these from the git tag (v1.2.3) and the run number.
+        versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
+        versionName = System.getenv("VERSION_NAME") ?: "0.1.0"
+    }
+
+    signingConfigs {
+        // Fixed debug key in the repo, so every build has the same signature and
+        // new versions install as updates over old ones.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+        // Optional private release key (GitHub secrets KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS).
+        val releaseStore = System.getenv("RELEASE_KEYSTORE_FILE")
+        if (releaseStore != null) {
+            create("release") {
+                storeFile = file(releaseStore)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD") ?: System.getenv("KEYSTORE_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
             // R8 is disabled: the Anthropic SDK relies on Jackson reflection.
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 
