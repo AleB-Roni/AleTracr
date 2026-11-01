@@ -25,6 +25,8 @@ data class AiFoodItem(
     val protein: Double,
     val carbs: Double,
     val fat: Double,
+    val sugar: Double = 0.0,
+    val fiber: Double = 0.0,
     val confidence: String,
 )
 
@@ -34,3 +36,20 @@ data class AiEstimate(
 )
 
 class AiException(message: String, cause: Throwable? = null) : Exception(message, cause)
+
+/** Common interface so the app can switch between AI providers (Gemini = free, Claude = paid). */
+interface NutritionAi {
+    /** Meal photo and/or description -> list of foods with nutrition for the eaten amount. */
+    suspend fun estimateMeal(description: String?, imageJpeg: ByteArray?): AiEstimate
+
+    /** Photo of a nutrition facts table -> product with values per 100 g. */
+    suspend fun readLabel(imageJpeg: ByteArray): FoodProduct
+
+    /** Short, friendly coaching text based on a summary of the last days. */
+    suspend fun coach(summary: String): String
+}
+
+enum class AiProvider(val label: String) {
+    GEMINI("Google Gemini – kostenlos (Free Tier)"),
+    CLAUDE("Anthropic Claude – kostenpflichtig, sehr genau"),
+}

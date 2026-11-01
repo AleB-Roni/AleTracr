@@ -1,40 +1,51 @@
 # AleTracr
 
-Kalorien-Tracker für Android – ähnlich wie MyFitnessPal, mit KI-Erkennung per Foto oder Text.
+Kalorien-Tracker für Android – ähnlich wie MyFitnessPal, mit **kostenloser KI-Erkennung** per Foto oder Text.
+
+![Design-Vorschau](docs/preview.png)
+
+> Die Grafik ist eine Design-Vorschau (HTML-Nachbau des Compose-UI), kein Screenshot vom Gerät.
 
 ## Funktionen
 
-- **Tagebuch** mit Frühstück, Mittagessen, Abendessen und Snacks, Tag vor/zurück blättern
-- **Kalorienring & Makros** (Eiweiß, Kohlenhydrate, Fett) mit Tageszielen
-- **Produktsuche** in [Open Food Facts](https://world.openfoodfacts.org) (über 3 Mio. Produkte, sehr gute Abdeckung für Deutschland)
-- **Barcode-Scanner** (Google Code Scanner, keine Kamera-Berechtigung nötig)
-- **KI-Schätzung** mit Claude (Anthropic): Foto vom Teller machen und/oder beschreiben („2 Brötchen mit Nutella und ein Cappuccino“) → Lebensmittel, Mengen, Kalorien und Makros, vor dem Speichern editierbar
-- **Schnelleintrag**: nur Kalorien (optional Makros und Notiz)
-- **Dauerhafte Benachrichtigung** „Noch X kcal übrig“ mit Fortschrittsbalken
-  - **Kalorien eintragen** direkt in der Benachrichtigung (z. B. `250 Apfel`, Mahlzeit wird nach Uhrzeit gewählt)
-  - **Mehr…** öffnet den Schnelleintrag in der App
-  - **Ausblenden** schaltet sie ab – in den Einstellungen wieder aktivierbar
-- **Zuletzt verwendet & Favoriten**
-- **Mahlzeit von gestern kopieren**
-- **Wasser-Tracker** (+250 ml)
-- **Fortschritt**: 7-Tage-Diagramm, Durchschnitt, Gewichtsverlauf
-- **Kalorienbedarf-Rechner** (Mifflin-St Jeor) in den Einstellungen
+**Tagebuch**
+- Frühstück, Mittagessen, Abendessen, Snacks – Tage vor/zurück blättern
+- Animierter Kalorienring, Makros (Eiweiß, Kohlenhydrate, Fett) sowie Zucker & Ballaststoffe
+- Mahlzeit von gestern kopieren, Mahlzeit als **Rezept** speichern, Löschen mit „Rückgängig“
 
-## KI einrichten
+**Hinzufügen**
+- **Produktsuche** in [Open Food Facts](https://world.openfoodfacts.org) (über 3 Mio. Produkte) + **Barcode-Scanner**
+- **KI-Schätzung** per Foto und/oder Beschreibung, editierbar vor dem Speichern
+- **Nährwerttabelle fotografieren** – die KI liest die Werte pro 100 g ab
+- Zuletzt verwendet, Favoriten, Rezepte, **Schnelleintrag**
 
-1. API-Key auf [console.anthropic.com](https://console.anthropic.com) erstellen.
-2. In der App unter **Einstellungen → KI** einfügen und Modell wählen:
-   - *Claude Opus 5.5* – genaueste Schätzung (Standard)
-   - *Claude Sonnet 5.5* – schneller, günstiger
-   - *Claude Haiku 5.5* – am günstigsten
-3. Der Key wird nur lokal auf dem Gerät gespeichert.
+**Immer im Blick**
+- **Homescreen-Widget**: übrige Kalorien, Makros, „+ Eintragen“
+- **Dauerhafte Benachrichtigung** „Noch X kcal übrig“ – Kalorien direkt eintippen (`250 Apfel`), „Mehr…“, „Ausblenden“
+- **Smarte Erinnerungen**: Frühstück/Mittag/Abend nur, wenn noch nichts eingetragen ist; Wasser-Erinnerung
+- **Intervallfasten-Timer** (14/16/18 h) mit Benachrichtigung bei Ziel
+
+**Fortschritt**
+- 7-Tage-Diagramm, Gewichtsverlauf, **KI-Coach** mit Wochenanalyse und Tipps
+- **Health Connect**: Schritte & aktive Kalorien erhöhen das Tagesbudget
+
+**Daten**
+- Backup/Wiederherstellen (JSON), Export als CSV (Excel)
+- Kalorienbedarf-Rechner (Mifflin-St Jeor)
+
+## KI einrichten (kostenlos)
+
+1. Auf [aistudio.google.com/apikey](https://aistudio.google.com/apikey) mit dem Google-Konto anmelden und einen API-Key erstellen (keine Kreditkarte nötig).
+2. In der App: **Einstellungen → KI → Google Gemini** und Key einfügen.
+3. Gratis-Tarif hat Tageslimits; Google darf kostenlose Anfragen zur Produktverbesserung nutzen.
+   Ändert Google den Modellnamen, kann er in den Einstellungen angepasst werden.
+
+Alternativ: **Anthropic Claude** (kostenpflichtig, sehr genau) – Key von console.anthropic.com.
 
 ## Bauen
 
 Jeder Push auf `main` baut per GitHub Actions ein Debug-APK
 (**Actions → Build APK → Artifacts → AleTracr-debug-apk**).
-
-Lokal (Android Studio oder JDK 17 + Android SDK):
 
 ```bash
 ./gradlew assembleDebug
@@ -42,7 +53,7 @@ Lokal (Android Studio oder JDK 17 + Android SDK):
 
 ## Technik
 
-Kotlin · Jetpack Compose (Material 3) · Room · DataStore · OkHttp · kotlinx.serialization ·
-Anthropic Java SDK · ML Kit Code Scanner · Coil
+Kotlin · Jetpack Compose (Material 3, Animationen) · Room · DataStore · WorkManager · Glance (Widget) ·
+Health Connect · OkHttp · kotlinx.serialization · Gemini REST API · Anthropic Java SDK · ML Kit Code Scanner · Coil
 
 Produktdaten: © Open Food Facts contributors, [ODbL](https://opendatacommons.org/licenses/odbl/1-0/).

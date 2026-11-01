@@ -2,6 +2,7 @@ package com.aleb.aletracr.ui.stats
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,7 +17,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,6 +47,20 @@ import com.aleb.aletracr.data.Repository
 import com.aleb.aletracr.data.UserSettings
 import com.aleb.aletracr.data.WeightEntry
 import com.aleb.aletracr.ui.NumberField
+import com.aleb.aletracr.ui.SoftCard
+import com.aleb.aletracr.ui.Staggered
+import com.aleb.aletracr.ui.theme.Gradients
+import com.aleb.aletracr.remote.AiException
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.LaunchedEffect
 import com.aleb.aletracr.util.toDecimal
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -82,8 +96,9 @@ fun StatsScreen(repo: Repository) {
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            item { Staggered(0) { CoachCard(repo) } }
             item {
-                Card(Modifier.fillMaxWidth()) {
+                SoftCard {
                     Column(Modifier.padding(16.dp)) {
                         Text("Letzte 7 Tage", style = MaterialTheme.typography.titleMedium)
                         Text(
@@ -105,7 +120,7 @@ fun StatsScreen(repo: Repository) {
                 }
             }
             item {
-                Card(Modifier.fillMaxWidth()) {
+                SoftCard {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Gewicht", style = MaterialTheme.typography.titleMedium)
                         if (weights.size >= 2) {
@@ -151,17 +166,19 @@ private fun WeekChart(values: List<Double>, goal: Int) {
     val bar = MaterialTheme.colorScheme.primary
     val over = MaterialTheme.colorScheme.error
     val line = MaterialTheme.colorScheme.outline
+    val grow = remember { Animatable(0f) }
+    LaunchedEffect(values) { grow.snapTo(0f); grow.animateTo(1f, androidx.compose.animation.core.tween(900, easing = FastOutSlowInEasing)) }
     Canvas(Modifier.fillMaxWidth().height(140.dp)) {
         val maxV = maxOf(values.maxOrNull() ?: 0.0, goal * 1.2).toFloat().coerceAtLeast(1f)
         val slot = size.width / values.size
         val w = slot * 0.6f
         values.forEachIndexed { i, v ->
-            val h = (v.toFloat() / maxV) * size.height
+            val h = (v.toFloat() / maxV) * size.height * grow.value
             drawRoundRect(
                 color = if (v > goal) over else bar,
                 topLeft = Offset(i * slot + (slot - w) / 2, size.height - h),
                 size = Size(w, h),
-                cornerRadius = CornerRadius(6f, 6f),
+                cornerRadius = CornerRadius(14f, 14f),
             )
         }
         val gy = size.height - goal / maxV * size.height
@@ -185,5 +202,57 @@ private fun WeightChart(weights: List<WeightEntry>) {
             drawCircle(color, 5f, Offset(x, y))
         }
         drawPath(path, color, style = Stroke(4f))
+    }
+}
+
+/** AI coach: sends a summary of the last 7 days and shows personalised tips. */
+@Composable
+private fun CoachCard(repo: Repository) {
+    val scope = rememberCoroutineScope()
+    var text by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    Box(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.large).background(Gradients.ai)) {
+        Column(Modifier.padding(18.dp).animateContentSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.AutoAwesome, null, tint = Color.White)
+                Spacer(Modifier.width(8.dp))
+                Text("KI-Coach", color = Color.White, style = MaterialTheme.typography.titleMedium)
+            }
+            when {
+                loading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.height(18.dp).width(18.dp), color = Color.White, strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Analysiere deine Woche …", color = Color.White)
+                }
+                text != null -> Text(text!!, color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                else -> Text(
+                    "Lass dir deine letzten 7 Tage auswerten und erhalte persönliche Tipps.",
+                    color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            error?.let { Text(it, color = Color.White, style = MaterialTheme.typography.bodySmall) }
+            Text(
+                if (text == null) "Wochenanalyse starten →" else "Neu analysieren →",
+                color = Color.White, style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.clickable(enabled = !loading) {
+                    scope.launch {
+                        loading = true; error = null
+                        try {
+                            val ai = repo.aiClient()
+                            if (ai == null) error = "Bitte zuerst in den Einstellungen einen KI-Key hinterlegen."
+                            else text = ai.coach(repo.coachSummary())
+                        } catch (e: AiException) {
+                            error = e.message
+                        } catch (e: Exception) {
+                            error = "Fehler: ${e.message}"
+                        } finally {
+                            loading = false
+                        }
+                    }
+                }.padding(vertical = 4.dp),
+            )
+        }
     }
 }

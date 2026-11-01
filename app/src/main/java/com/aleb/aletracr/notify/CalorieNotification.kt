@@ -16,7 +16,6 @@ import com.aleb.aletracr.MainActivity
 import com.aleb.aletracr.R
 import com.aleb.aletracr.data.Repository
 import kotlinx.coroutines.flow.first
-import java.time.LocalDate
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -54,14 +53,16 @@ object CalorieNotification {
             return
         }
         if (!canPost(context)) return
-        val eaten = repo.diary.kcalFor(LocalDate.now().toString())
-        show(context, eaten, settings.kcalGoal)
+        show(context, TodayStatus.load(context, repo))
     }
 
-    private fun show(context: Context, eaten: Double, goal: Int) {
-        val remaining = (goal - eaten).roundToInt()
+    private fun show(context: Context, status: TodayStatus) {
+        val eaten = status.eaten
+        val goal = status.goal
+        val remaining = status.remaining.roundToInt()
         val title = if (remaining >= 0) "Noch $remaining kcal übrig" else "${abs(remaining)} kcal über dem Ziel"
-        val text = "Gegessen ${eaten.roundToInt()} von $goal kcal"
+        val text = "Gegessen ${eaten.roundToInt()} von $goal kcal" +
+            (if (status.activeKcal > 0) " (inkl. +${status.activeKcal} aktiv)" else "")
 
         val openApp = PendingIntent.getActivity(
             context, 0,

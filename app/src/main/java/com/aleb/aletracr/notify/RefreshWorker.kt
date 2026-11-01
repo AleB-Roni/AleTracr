@@ -18,6 +18,7 @@ class RefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorke
     override suspend fun doWork(): Result {
         val app = applicationContext as AleTracrApp
         CalorieNotification.refresh(applicationContext, app.repository)
+        com.aleb.aletracr.widget.CalorieWidget.refresh(applicationContext)
         return Result.success()
     }
 

@@ -14,6 +14,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -39,6 +46,7 @@ private val tabs = listOf(
     Tab("settings", "Einstellungen", Icons.Filled.Settings),
 )
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AppNav(repo: Repository, quickAddRequest: Int = 0, onEnableNotification: () -> Unit = {}) {
     val nav = rememberNavController()
@@ -75,7 +83,15 @@ fun AppNav(repo: Repository, quickAddRequest: Int = 0, onEnableNotification: () 
             }
         },
     ) { padding ->
-        NavHost(nav, startDestination = "diary", modifier = Modifier.padding(bottom = padding.calculateBottomPadding())) {
+        NavHost(
+            nav,
+            startDestination = "diary",
+            modifier = Modifier.padding(bottom = padding.calculateBottomPadding()).consumeWindowInsets(padding),
+            enterTransition = { fadeIn(tween(280)) + slideInVertically(tween(280)) { it / 24 } },
+            exitTransition = { fadeOut(tween(180)) },
+            popEnterTransition = { fadeIn(tween(280)) },
+            popExitTransition = { fadeOut(tween(180)) + slideOutVertically(tween(220)) { it / 24 } },
+        ) {
             composable("diary") {
                 DiaryScreen(repo, onAddFood = { date, meal -> nav.navigate("add/$date/${meal.name}") })
             }
