@@ -24,7 +24,7 @@ enum class Meal(val label: String) {
     }
 }
 
-enum class EntrySource { SEARCH, BARCODE, AI_PHOTO, AI_TEXT, AI_LABEL, QUICK, CUSTOM, COPY, RECIPE }
+enum class EntrySource { SEARCH, BARCODE, AI_PHOTO, AI_TEXT, AI_LABEL, QUICK, CUSTOM, COPY, RECIPE, VOICE }
 
 /** One logged food in the diary. Nutrition values are for the logged amount. */
 @Serializable

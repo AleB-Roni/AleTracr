@@ -1,5 +1,9 @@
 package com.aleb.aletracr.data
 
+import com.aleb.aletracr.food.FoodMatch
+import com.aleb.aletracr.food.FoodUnit
+import com.aleb.aletracr.food.ParsedFood
+import com.aleb.aletracr.food.SpeechFoodParser
 import com.aleb.aletracr.remote.AiFoodItem
 import com.aleb.aletracr.remote.AiProvider
 import com.aleb.aletracr.remote.ClaudeNutritionClient
@@ -132,6 +136,43 @@ class Repository(
             it.copy(id = 0, date = toDate, source = EntrySource.COPY, createdAt = System.currentTimeMillis())
         })
         return src.size
+    }
+
+    // --- Spracheingabe ohne KI -------------------------------------------------
+
+    /** Parser that knows the user's own foods (history first) plus the built-in table. */
+    suspend fun speechParser(): SpeechFoodParser {
+        val own = foods.all().map { it to SpeechFoodParser.norm(it.name) }
+        return SpeechFoodParser(history = { phrase ->
+            val p = SpeechFoodParser.norm(phrase)
+            own.filter { (_, n) -> n == p || n.startsWith("$p ") || " $n ".contains(" $p ") }
+                .maxByOrNull { (f, n) -> (if (n == p) 1000 else 0) + f.useCount }
+                ?.first?.let { f ->
+                    FoodMatch(
+                        name = f.name, brand = f.brand, kcalPer100 = f.kcalPer100, proteinPer100 = f.proteinPer100,
+                        carbsPer100 = f.carbsPer100, fatPer100 = f.fatPer100, sugarPer100 = f.sugarPer100 ?: 0.0,
+                        fiberPer100 = f.fiberPer100 ?: 0.0,
+                        unitGrams = buildMap {
+                            f.servingGrams?.let { put(FoodUnit.PORTION, it); put(FoodUnit.PIECE, it) }
+                        },
+                        defaultUnit = if (f.servingGrams != null) FoodUnit.PORTION else FoodUnit.GRAM,
+                        foodId = f.id,
+                    )
+                }
+        })
+    }
+
+    /** Saves parsed speech items; water goes to the water tracker. Returns (diary ids, water ids). */
+    suspend fun logParsed(date: String, meal: Meal, items: List<ParsedFood>): Pair<List<Long>, List<Long>> {
+        val waterIds = items.filter { it.match.isWater }.map { body.addWater(WaterEntry(date = date, ml = it.grams.toInt())) }
+        val diaryIds = diary.insertAll(items.filterNot { it.match.isWater }.map {
+            DiaryEntry(
+                date = date, meal = meal, name = it.match.name, brand = it.match.brand, amountGrams = it.grams,
+                kcal = it.kcal, protein = it.protein, carbs = it.carbs, fat = it.fat, sugar = it.sugar, fiber = it.fiber,
+                source = EntrySource.VOICE, foodId = it.match.foodId,
+            )
+        })
+        return diaryIds to waterIds
     }
 
     // --- Recipes ----------------------------------------------------------------

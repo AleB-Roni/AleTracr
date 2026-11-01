@@ -12,6 +12,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import com.aleb.aletracr.food.ParsedFood
 import com.aleb.aletracr.remote.AiEstimate
 import com.aleb.aletracr.remote.AiException
 import com.aleb.aletracr.remote.AiFoodItem
@@ -134,6 +135,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import kotlin.math.roundToInt
 
@@ -231,6 +234,34 @@ class DiaryViewModel(private val repo: Repository, private val app: Application)
         }
     }
 
+    // --- Schnelle Spracheingabe (offline, ohne KI) --------------------------------
+
+    val voiceResult = MutableStateFlow<VoiceResult?>(null)
+
+    /** Parses speech locally (milliseconds) and adds everything that was recognised. */
+    fun voice(meal: Meal, text: String) = viewModelScope.launch {
+        val parser = repo.speechParser()
+        val parsed = withContext(Dispatchers.Default) { parser.parse(text) }
+        if (parsed.recognized.isEmpty() && parsed.unknown.isEmpty()) {
+            aiError.value = "Nichts verstanden – versuch es z. B. mit „Apfel 150 Gramm“."
+            return@launch
+        }
+        val (diaryIds, waterIds) = repo.logParsed(date.value.toString(), meal, parsed.recognized)
+        voiceResult.value = VoiceResult(meal, text, parsed.recognized, parsed.unknown, diaryIds, waterIds)
+    }
+
+    fun undoVoice(r: VoiceResult) = viewModelScope.launch {
+        repo.diary.deleteIds(r.diaryIds)
+        repo.body.deleteWater(r.waterIds)
+        voiceResult.value = null
+    }
+
+    /** Sends only the parts the offline parser did not know to the AI. */
+    fun voiceUnknownToAi(r: VoiceResult) {
+        voiceResult.value = null
+        quickAi(r.meal, r.unknown.joinToString(", "), null)
+    }
+
     fun confirmAi(r: QuickAiResult, selected: List<AiFoodItem>) = viewModelScope.launch {
         if (selected.isNotEmpty()) repo.logAiItems(date.value.toString(), r.meal, selected, fromPhoto = r.photo != null)
         aiResult.value = null
@@ -241,6 +272,15 @@ class DiaryViewModel(private val repo: Repository, private val app: Application)
         aiResult.value = null
     }
 }
+
+class VoiceResult(
+    val meal: Meal,
+    val spokenText: String,
+    val recognized: List<ParsedFood>,
+    val unknown: List<String>,
+    val diaryIds: List<Long>,
+    val waterIds: List<Long>,
+)
 
 /** Result of a quick AI entry; [addedIds] is non-empty if the items were already saved (voice). */
 class QuickAiResult(
@@ -283,11 +323,12 @@ fun DiaryScreen(repo: Repository, onAddFood: (date: String, meal: Meal) -> Unit)
     val aiBusy by vm.aiBusy.collectAsState()
     val aiResult by vm.aiResult.collectAsState()
     val aiError by vm.aiError.collectAsState()
+    val voiceResult by vm.voiceResult.collectAsState()
     var captureMeal by remember { mutableStateOf(Meal.forTime()) }
     val speak = rememberSpeechInput(
-        prompt = "Was hast du gegessen? z. B. \"zwei Scheiben Vollkornbrot mit Käse\"",
+        prompt = "Was hast du gegessen? z. B. „Apfel 150 Gramm und zwei Scheiben Vollkornbrot“",
         onError = { vm.aiError.value = it },
-    ) { text -> vm.quickAi(captureMeal, text, null) }
+    ) { text -> vm.voice(captureMeal, text) }
     val photo = rememberPhotoCapture { bytes -> vm.quickAi(captureMeal, null, bytes) }
 
     LaunchedEffect(aiError) {
@@ -373,6 +414,15 @@ fun DiaryScreen(repo: Repository, onAddFood: (date: String, meal: Meal) -> Unit)
                 }
             },
             onSave = { grams, kcal -> vm.updateAmount(e, grams, kcal); editing = null },
+        )
+    }
+
+    voiceResult?.let { r ->
+        VoiceResultDialog(
+            result = r,
+            onDone = { vm.voiceResult.value = null },
+            onUndo = { vm.undoVoice(r) },
+            onAskAi = { vm.voiceUnknownToAi(r) },
         )
     }
 
@@ -674,6 +724,13 @@ private fun EntryRow(e: DiaryEntry, onClick: () -> Unit) {
                         tint = MaterialTheme.colorScheme.tertiary,
                     )
                 }
+                if (e.source == EntrySource.VOICE) {
+                    Icon(
+                        Icons.Filled.Mic, "Per Sprache eingetragen",
+                        Modifier.padding(end = 4.dp).size(14.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
                 Text(e.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
             }
             val details = listOfNotNull(e.brand, e.amountGrams?.gramText(), e.note).joinToString(" · ")
@@ -807,6 +864,65 @@ private fun QuickAiDialog(
                 TextButton(onClick = onUndo) { Text("Rückgängig", color = MaterialTheme.colorScheme.error) }
             } else {
                 TextButton(onClick = onClose) { Text("Verwerfen") }
+            }
+        },
+    )
+}
+
+@Composable
+private fun VoiceResultDialog(
+    result: VoiceResult,
+    onDone: () -> Unit,
+    onUndo: () -> Unit,
+    onAskAi: () -> Unit,
+) {
+    val total = result.recognized.filterNot { it.match.isWater }.sumOf { it.kcal }
+    AlertDialog(
+        onDismissRequest = onDone,
+        icon = { Icon(Icons.Filled.Mic, null, tint = MaterialTheme.colorScheme.primary) },
+        title = {
+            Text(if (result.recognized.isEmpty()) "Nicht erkannt" else "Zu ${result.meal.label} hinzugefügt")
+        },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("„${result.spokenText}“", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (result.recognized.isNotEmpty()) {
+                    Text("${total.roundToInt()} kcal", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+                }
+                result.recognized.forEach { item ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(item.match.name + (item.match.brand?.let { " · $it" } ?: ""), style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                if (item.match.isWater) "${item.grams.toInt()} ml → Wasser-Tracker" else item.amountLabel,
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (!item.match.isWater) Text("${item.kcal.roundToInt()}", style = MaterialTheme.typography.titleSmall)
+                    }
+                }
+                if (result.unknown.isNotEmpty()) {
+                    HorizontalDivider()
+                    Text("Nicht in der Datenbank:", style = MaterialTheme.typography.labelLarge)
+                    result.unknown.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
+                    FilledTonalButton(onClick = onAskAi, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Filled.AutoAwesome, null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Mit KI schätzen")
+                    }
+                }
+                if (result.recognized.isNotEmpty()) {
+                    Text(
+                        "Tippe im Tagebuch auf einen Eintrag, um die Menge zu ändern.",
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDone) { Text("Fertig") } },
+        dismissButton = {
+            if (result.recognized.isNotEmpty()) {
+                TextButton(onClick = onUndo) { Text("Rückgängig", color = MaterialTheme.colorScheme.error) }
             }
         },
     )

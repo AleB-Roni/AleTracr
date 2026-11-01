@@ -15,8 +15,10 @@ Kalorien-Tracker für Android – ähnlich wie MyFitnessPal, mit **kostenloser K
 
 **Direkt im Tagebuch**
 - 📷 **Essen fotografieren** → KI-Zusammenfassung mit Kalorien, Lebensmitteln und Mengen → bestätigen
-- 🎤 **Per Sprache eintragen**: „zwei Scheiben Vollkornbrot mit Käse und ein Apfel“ → die KI erkennt Stückzahlen
-  und Grammangaben und trägt alles automatisch ein (mit „Rückgängig“)
+- 🎤 **Per Sprache eintragen – blitzschnell & offline**: „Apfel 30 Gramm und zwei Scheiben Vollkornbrot mit Käse“
+  → Mengen, Stückzahlen und Einheiten (Gramm, Scheibe, Glas, EL, Handvoll …) werden direkt auf dem Handy erkannt,
+  Nährwerte kommen aus deinen bisherigen Produkten und einer eingebauten Tabelle mit ~120 Lebensmitteln.
+  Wasser landet im Wasser-Tracker. Unbekanntes kann per Knopf von der KI geschätzt werden.
 
 **Hinzufügen**
 - **Produktsuche** in [Open Food Facts](https://world.openfoodfacts.org) (über 3 Mio. Produkte) + **Barcode-Scanner**

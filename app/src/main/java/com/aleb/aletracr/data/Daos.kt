@@ -90,7 +90,10 @@ interface BodyDao {
     fun waterFor(date: String): Flow<Int>
 
     @Insert
-    suspend fun addWater(entry: WaterEntry)
+    suspend fun addWater(entry: WaterEntry): Long
+
+    @Query("DELETE FROM water WHERE id IN (:ids)")
+    suspend fun deleteWater(ids: List<Long>)
 
     @Query("DELETE FROM water WHERE id = (SELECT id FROM water WHERE date = :date ORDER BY id DESC LIMIT 1)")
     suspend fun undoLastWater(date: String)
