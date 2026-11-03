@@ -172,7 +172,7 @@ class DiaryViewModel(private val repo: Repository, private val app: Application)
     fun restore(e: DiaryEntry) = viewModelScope.launch { repo.diary.insert(e.copy(id = 0)) }
 
     /** Changing the amount scales kcal and all nutrients proportionally. */
-    fun updateAmount(e: DiaryEntry, grams: Double?, kcal: Double?) = viewModelScope.launch {
+    fun updateAmount(e: DiaryEntry, grams: Double?, kcal: Double?, meal: Meal = e.meal) = viewModelScope.launch {
         val updated = when {
             grams != null && e.amountGrams != null && e.amountGrams > 0 -> {
                 val f = grams / e.amountGrams
@@ -184,7 +184,7 @@ class DiaryViewModel(private val repo: Repository, private val app: Application)
             kcal != null -> e.copy(kcal = kcal)
             else -> e
         }
-        repo.diary.update(updated)
+        repo.diary.update(updated.copy(meal = meal))
     }
 
     suspend fun copyFromYesterday(meal: Meal): Int {
@@ -413,7 +413,11 @@ fun DiaryScreen(repo: Repository, onAddFood: (date: String, meal: Meal) -> Unit)
                     if (r == androidx.compose.material3.SnackbarResult.ActionPerformed) vm.restore(e)
                 }
             },
-            onSave = { grams, kcal -> vm.updateAmount(e, grams, kcal); editing = null },
+            onSave = { grams, kcal, meal ->
+                vm.updateAmount(e, grams, kcal, meal)
+                editing = null
+                if (meal != e.meal) scope.launch { snackbar.showSnackbar("${e.name} → ${meal.label} verschoben") }
+            },
         )
     }
 
@@ -439,7 +443,7 @@ fun DiaryScreen(repo: Repository, onAddFood: (date: String, meal: Meal) -> Unit)
         var name by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { savingRecipe = null },
-            title = { Text("Als Rezept speichern") },
+            title = { Text("Als Gericht speichern") },
             text = {
                 OutlinedTextField(name, { name = it }, label = { Text("Name, z. B. Mein Müsli") }, singleLine = true)
             },
@@ -448,7 +452,7 @@ fun DiaryScreen(repo: Repository, onAddFood: (date: String, meal: Meal) -> Unit)
                     savingRecipe = null
                     scope.launch {
                         val n = vm.saveRecipe(meal, name)
-                        snackbar.showSnackbar(if (n == 0) "${meal.label} ist leer" else "Rezept \"$name\" mit $n Zutaten gespeichert")
+                        snackbar.showSnackbar(if (n == 0) "${meal.label} ist leer" else "Gericht \"$name\" mit $n Zutaten gespeichert")
                     }
                 }) { Text("Speichern") }
             },
@@ -667,7 +671,7 @@ private fun MealCard(
                             onClick = { menu = false; onCopyYesterday() },
                         )
                         DropdownMenuItem(
-                            text = { Text("Als Rezept speichern") },
+                            text = { Text("Als Gericht speichern") },
                             leadingIcon = { Icon(Icons.Filled.BookmarkAdd, null) },
                             onClick = { menu = false; onSaveRecipe() },
                         )
@@ -750,9 +754,10 @@ private fun EditEntryDialog(
     entry: DiaryEntry,
     onDismiss: () -> Unit,
     onDelete: () -> Unit,
-    onSave: (grams: Double?, kcal: Double?) -> Unit,
+    onSave: (grams: Double?, kcal: Double?, meal: Meal) -> Unit,
 ) {
     val hasGrams = entry.amountGrams != null
+    var meal by remember { mutableStateOf(entry.meal) }
     var text by remember {
         mutableStateOf(if (hasGrams) entry.amountGrams!!.roundToInt().toString() else entry.kcal.roundToInt().toString())
     }
@@ -768,12 +773,26 @@ private fun EditEntryDialog(
                     NutrientPill("F", entry.fat.gramText(), MacroColors.fat)
                 }
                 NumberField(text, { text = it }, if (hasGrams) "Menge" else "Kalorien", suffix = if (hasGrams) "g" else "kcal")
+                Text("Mahlzeit", style = MaterialTheme.typography.labelLarge)
+                Meal.entries.chunked(2).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { m ->
+                            FilterChip(
+                                selected = meal == m,
+                                onClick = { meal = m },
+                                label = { Text(m.label, maxLines = 1) },
+                                leadingIcon = { Icon(m.icon(), null, Modifier.size(18.dp), tint = m.color()) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
             TextButton(onClick = {
                 val v = text.toDecimal()
-                if (hasGrams) onSave(v, null) else onSave(null, v)
+                if (hasGrams) onSave(v, null, meal) else onSave(null, v, meal)
             }) { Text("Speichern") }
         },
         dismissButton = {

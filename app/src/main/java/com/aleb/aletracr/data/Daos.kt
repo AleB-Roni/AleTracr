@@ -132,6 +132,12 @@ interface RecipeDao {
     @Query("SELECT * FROM recipes")
     suspend fun allRecipes(): List<Recipe>
 
+    @Query("SELECT * FROM recipes WHERE id = :id")
+    suspend fun recipe(id: Long): Recipe?
+
+    @Query("UPDATE recipes SET name = :name WHERE id = :id")
+    suspend fun rename(id: Long, name: String)
+
     @Query("SELECT * FROM recipe_items")
     suspend fun allItems(): List<RecipeItem>
 

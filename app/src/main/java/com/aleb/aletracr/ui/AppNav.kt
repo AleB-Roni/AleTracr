@@ -33,6 +33,7 @@ import androidx.navigation.navArgument
 import com.aleb.aletracr.data.Meal
 import com.aleb.aletracr.data.Repository
 import com.aleb.aletracr.ui.add.AddFoodScreen
+import com.aleb.aletracr.ui.add.DishEditorScreen
 import com.aleb.aletracr.ui.add.QUICK_ADD_TAB
 import java.time.LocalDate
 import com.aleb.aletracr.ui.diary.DiaryScreen
@@ -100,6 +101,9 @@ fun AppNav(repo: Repository, quickAddRequest: Int = 0, onEnableNotification: () 
                 DiaryScreen(repo, onAddFood = { date, meal -> nav.navigate("add/$date/${meal.name}") })
             }
             composable("stats") { StatsScreen(repo) }
+            composable("dish/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { entry ->
+                DishEditorScreen(repo, entry.arguments?.getLong("id") ?: 0L, onDone = { nav.popBackStack() })
+            }
             composable("settings") { SettingsScreen(repo, onEnableNotification) }
             composable(
                 "add/{date}/{meal}?tab={tab}",
@@ -112,7 +116,11 @@ fun AppNav(repo: Repository, quickAddRequest: Int = 0, onEnableNotification: () 
                 val date = entry.arguments?.getString("date").orEmpty()
                 val meal = Meal.valueOf(entry.arguments?.getString("meal") ?: Meal.SNACK.name)
                 val tab = entry.arguments?.getInt("tab") ?: 0
-                AddFoodScreen(repo, date, meal, initialTab = tab, onDone = { nav.popBackStack() })
+                AddFoodScreen(
+                    repo, date, meal, initialTab = tab,
+                    onEditDish = { id -> nav.navigate("dish/$id") },
+                    onDone = { nav.popBackStack() },
+                )
             }
         }
     }

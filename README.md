@@ -24,7 +24,9 @@ Kalorien-Tracker für Android – ähnlich wie MyFitnessPal, mit **kostenloser K
 - **Produktsuche** in [Open Food Facts](https://world.openfoodfacts.org) (über 3 Mio. Produkte) + **Barcode-Scanner**
 - **KI-Schätzung** per Foto und/oder Beschreibung, editierbar vor dem Speichern
 - **Nährwerttabelle fotografieren** – die KI liest die Werte pro 100 g ab
-- Zuletzt verwendet, Favoriten, Rezepte, **Schnelleintrag**
+- **Eigene Gerichte**: mehrere Lebensmittel mit Grammangaben zu einem Gericht kombinieren und auf einmal eintragen (½–2 Portionen)
+- Zuletzt verwendet, Favoriten, **Schnelleintrag**
+- Einträge per Tipp **in eine andere Mahlzeit verschieben** (z. B. Frühstück → Mittagessen)
 
 **Immer im Blick**
 - **Homescreen-Widget**: übrige Kalorien, Makros, „+ Eintragen“

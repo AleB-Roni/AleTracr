@@ -1,5 +1,7 @@
 package com.aleb.aletracr.data
 
+import com.aleb.aletracr.food.CommonFood
+import com.aleb.aletracr.food.CommonFoods
 import com.aleb.aletracr.food.FoodMatch
 import com.aleb.aletracr.food.FoodUnit
 import com.aleb.aletracr.food.ParsedFood
@@ -55,8 +57,18 @@ class Repository(
         return off.byBarcode(barcode)
     }
 
-    suspend fun searchLocal(query: String): List<FoodProduct> =
-        foods.searchLocal(query).map { it.toProduct() }
+    /** Own foods first, then matching entries from the built-in table (offline, instant). */
+    suspend fun searchLocal(query: String): List<FoodProduct> {
+        val own = foods.searchLocal(query).map { it.toProduct() }
+        val q = SpeechFoodParser.norm(query)
+        val builtIn = CommonFoods.all.filter { f ->
+            (listOf(f.name) + f.aliases).any { a ->
+                val n = SpeechFoodParser.norm(a)
+                n.startsWith(q) || " $n ".contains(" $q") || (q.length >= 4 && q.contains(n))
+            }
+        }.filterNot { it.isWater }.map { it.toProduct() }
+        return (own + builtIn).distinctBy { it.name.lowercase() + it.brand }
+    }
 
     /** Log a portion of a product and remember the product for "Zuletzt". */
     suspend fun logProduct(date: String, meal: Meal, product: FoodProduct, grams: Double, source: EntrySource) {
@@ -206,6 +218,19 @@ class Repository(
         })
     }
 
+    /** Creates (id = 0) or replaces a dish with the given ingredients. Returns its id. */
+    suspend fun saveDish(id: Long, name: String, items: List<RecipeItem>): Long = db.withTransaction {
+        val dishId = if (id == 0L) {
+            recipes.insert(Recipe(name = name.trim()))
+        } else {
+            recipes.rename(id, name.trim())
+            recipes.deleteItems(id)
+            id
+        }
+        recipes.insertItems(items.map { it.copy(id = 0, recipeId = dishId) })
+        dishId
+    }
+
     suspend fun deleteRecipe(id: Long) = db.withTransaction {
         recipes.deleteItems(id)
         recipes.deleteRecipe(id)
@@ -311,3 +336,20 @@ fun FoodProduct.toFoodItem() = FoodItem(
     sugarPer100 = sugarPer100, fiberPer100 = fiberPer100,
     servingGrams = servingGrams, servingLabel = servingLabel, imageUrl = imageUrl,
 )
+
+/** Built-in food as a product (values per 100 g, typical piece/slice as serving). */
+fun CommonFood.toProduct(): FoodProduct {
+    val serving = units[FoodUnit.PIECE] ?: units[FoodUnit.SLICE] ?: units[defaultUnit]
+    val servingLabel = when {
+        units[FoodUnit.PIECE] != null -> "1 Stück"
+        units[FoodUnit.SLICE] != null -> "1 Scheibe"
+        serving != null -> "1 " + defaultUnit.words.first().replaceFirstChar { it.uppercase() }
+        else -> null
+    }
+    return FoodProduct(
+        name = name, brand = "Standardwert", barcode = null,
+        kcalPer100 = kcal, proteinPer100 = protein, carbsPer100 = carbs, fatPer100 = fat,
+        sugarPer100 = sugar, fiberPer100 = fiber,
+        servingGrams = serving, servingLabel = servingLabel,
+    )
+}

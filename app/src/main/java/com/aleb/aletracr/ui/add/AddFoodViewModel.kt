@@ -9,7 +9,9 @@ import com.aleb.aletracr.data.toProduct
 import com.aleb.aletracr.remote.AiException
 import com.aleb.aletracr.remote.AiFoodItem
 import com.aleb.aletracr.remote.FoodProduct
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
@@ -75,25 +77,42 @@ class AddFoodViewModel(
 
     // --- Search ---------------------------------------------------------------
 
-    fun setQuery(q: String) = _search.update { it.copy(query = q) }
+    /** Typing searches automatically after a short pause (local results appear instantly). */
+    fun setQuery(q: String) {
+        _search.update { it.copy(query = q) }
+        searchJob?.cancel()
+        if (q.trim().length >= 3) {
+            searchJob = viewModelScope.launch {
+                delay(600)
+                doSearch(q.trim())
+            }
+        }
+    }
 
     fun runSearch() {
         val q = _search.value.query.trim()
         if (q.length < 2) return
         searchJob?.cancel()
-        searchJob = viewModelScope.launch {
-            _search.update { it.copy(loading = true, error = null) }
-            val local = repo.searchLocal(q)
-            _search.update { it.copy(results = local) }
-            try {
-                val online = repo.searchOnline(q)
-                val merged = (local + online).distinctBy { it.barcode ?: (it.name + it.brand) }
-                _search.update { it.copy(results = merged, loading = false, searched = true) }
-            } catch (e: Exception) {
-                _search.update {
-                    it.copy(loading = false, searched = true, error = "Online-Suche fehlgeschlagen: ${e.message ?: "unbekannter Fehler"}")
-                }
+        searchJob = viewModelScope.launch { doSearch(q) }
+    }
+
+    private suspend fun doSearch(q: String) {
+        _search.update { it.copy(loading = true, error = null) }
+        val local = repo.searchLocal(q)
+        _search.update { it.copy(results = local) }
+        try {
+            val online = repo.searchOnline(q)
+            val merged = (local + online).distinctBy { it.barcode ?: (it.name + it.brand) }
+            _search.update { it.copy(results = merged, loading = false, searched = true) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val msg = if (local.isNotEmpty()) {
+                "Open Food Facts ist gerade nicht erreichbar – es werden nur lokale Treffer angezeigt."
+            } else {
+                "Open Food Facts ist gerade nicht erreichbar. Bitte gleich noch einmal versuchen – oder Schnelleintrag/KI nutzen."
             }
+            _search.update { it.copy(loading = false, searched = true, error = msg) }
         }
     }
 

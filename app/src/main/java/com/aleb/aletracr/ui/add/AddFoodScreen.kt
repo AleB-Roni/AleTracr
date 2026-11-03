@@ -44,7 +44,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DocumentScanner
@@ -131,12 +133,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
-private val TABS = listOf("Suchen", "Zuletzt", "Favoriten", "Rezepte", "KI", "Schnell")
+private val TABS = listOf("Suchen", "Zuletzt", "Favoriten", "Gerichte", "KI", "Schnell")
 const val QUICK_ADD_TAB = 5
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddFoodScreen(repo: Repository, date: String, meal: Meal, initialTab: Int = 0, onDone: () -> Unit) {
+fun AddFoodScreen(
+    repo: Repository,
+    date: String,
+    meal: Meal,
+    initialTab: Int = 0,
+    onEditDish: (Long) -> Unit = {},
+    onDone: () -> Unit,
+) {
     val vm: AddFoodViewModel = viewModel(
         key = "add-$date-$meal",
         factory = viewModelFactory { initializer { AddFoodViewModel(repo, date, meal) } },
@@ -181,7 +190,7 @@ fun AddFoodScreen(repo: Repository, date: String, meal: Meal, initialTab: Int = 
                     0 -> SearchTab(vm)
                     1 -> ProductList(vm, vm.recent.collectAsState().value, "Hier erscheinen deine zuletzt gegessenen Produkte.")
                     2 -> ProductList(vm, vm.favorites.collectAsState().value, "Markiere Produkte mit ☆ als Favorit.")
-                    3 -> RecipesTab(vm, onDone)
+                    3 -> RecipesTab(vm, onEditDish, onDone)
                     4 -> AiTab(vm, onDone)
                     else -> QuickAddTab(vm, onDone)
                 }
@@ -382,16 +391,24 @@ private fun Nutrient(label: String, value: String, color: Color) {
 // ----------------------------------------------------------------------------- Recipes
 
 @Composable
-private fun RecipesTab(vm: AddFoodViewModel, onDone: () -> Unit) {
+private fun RecipesTab(vm: AddFoodViewModel, onEditDish: (Long) -> Unit, onDone: () -> Unit) {
     val recipes by vm.recipes.collectAsState()
     var chosen by remember { mutableStateOf<RecipeWithTotals?>(null) }
-    if (recipes.isEmpty()) {
-        EmptyState(
-            "Noch keine Rezepte. Trage eine Mahlzeit ein und wähle im Tagebuch ⋮ → „Als Rezept speichern“.",
-            Icons.Filled.MenuBook,
-        )
-    } else {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item {
+            Button(onClick = { onEditDish(0L) }, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                Icon(Icons.Filled.Add, null); Spacer(Modifier.width(6.dp)); Text("Neues Gericht erstellen")
+            }
+        }
+        if (recipes.isEmpty()) {
+            item {
+                EmptyState(
+                    "Stelle Gerichte aus mehreren Lebensmitteln zusammen (z. B. „Mein Müsli“) und trage sie später mit einem Tipp ein. " +
+                        "Tipp: Im Tagebuch über ⋮ → „Als Gericht speichern“ geht es auch aus einer Mahlzeit.",
+                    Icons.Filled.MenuBook,
+                )
+            }
+        } else {
             items(recipes, key = { it.id }) { r ->
                 SoftCard(Modifier.clickable { chosen = r }) {
                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -401,6 +418,7 @@ private fun RecipesTab(vm: AddFoodViewModel, onDone: () -> Unit) {
                             Text(r.name, style = MaterialTheme.typography.titleMedium)
                             Text("${r.itemCount} Zutaten · ${r.kcal.roundToInt()} kcal", style = MaterialTheme.typography.bodySmall)
                         }
+                        IconButton(onClick = { onEditDish(r.id) }) { Icon(Icons.Filled.Edit, "Bearbeiten") }
                         IconButton(onClick = { vm.deleteRecipe(r.id) }) { Icon(Icons.Filled.Delete, "Löschen") }
                     }
                 }
